@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/activity_main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:backgroundTintMode="src_in"
+    tools:context=".MainActivity">
+
+   <TextView
+       android:id="@+id/tv"
+       android:layout_width="wrap_content"
+       android:layout_height="wrap_content"
+       android:layout_alignParentLeft="true"
+       android:layout_alignParentRight="true"
+       android:layout_marginTop="10dp"
+       android:textAlignment="center" />
+
+   <TextView
+       android:id="@+id/tv_status"
+       android:layout_width="192dp"
+       android:layout_height="wrap_content"
+       android:layout_below="@+id/tv"
+       android:layout_alignStart="@+id/btn_wifi"
+       android:layout_alignParentRight="true"
+       android:layout_marginStart="0dp"
+       android:text="Not connected"
+       android:textAlignment="center" />
+
+   <Button
+       android:id="@+id/btn_up"
+       android:layout_width="wrap_content"
+       android:layout_height="wrap_content"
+       android:layout_marginTop="70dp"
+       android:layout_toRightOf="@id/btn_left"
+       android:text="Lên" />
+
+   <Button
+       android:id="@+id/btn_stop"
+       android:layout_width="wrap_content"
+       android:layout_height="wrap_content"
+       android:layout_below="@id/btn_up"
+       android:layout_toRightOf="@id/btn_left"
+       android:text="Stop" />
+
+
+   <Button
+       android:id="@+id/btn_down"
+       android:layout_width="wrap_content"
+       android:layout_height="wrap_content"
+       android:layout_below="@id/btn_stop"
+       android:layout_toRightOf="@id/btn_left"
+       android:text="Xuống" />
+
+   <Button
+       android:id="@+id/btn_left"
+       android:layout_width="wrap_content"
+       android:layout_height="wrap_content"
+       android:layout_below="@id/btn_up"
+       android:layout_marginLeft="20dp"
+       android:text="Trái" />
+
+   <Button
+       android:id="@+id/btn_right"
+       android:layout_width="wrap_content"
+       android:layout_height="wrap_content"
+       android:layout_above="@id/btn_down"
+       android:layout_toRightOf="@id/btn_up"
+       android:text="Phải" />
+
+   <Button
+       android:id="@+id/btn_wifi"
+       android:layout_width="@android:dimen/thumbnail_width"
+       android:layout_height="wrap_content"
+       android:layout_alignParentRight="true"
+       android:layout_marginTop="60dp"
+       android:text="Wifi" />
+
+   <Button
+       android:id="@+id/btn_bluetooth"
+       android:layout_width="@android:dimen/thumbnail_width"
+       android:layout_height="wrap_content"
+       android:layout_below="@id/btn_wifi"
+       android:layout_alignParentRight="true"
+       android:text="Bluetooth" />
+
+   <Button
+       android:id="@+id/btn_ab"
+       android:layout_width="@android:dimen/thumbnail_width"
+       android:layout_height="wrap_content"
+       android:layout_below="@id/btn_bluetooth"
+       android:layout_alignParentRight="true"
+       android:text="Auto Obstacle" />
+
+   <Button
+       android:id="@+id/btn_af"
+       android:layout_width="@android:dimen/thumbnail_width"
+       android:layout_height="wrap_content"
+       android:layout_below="@id/btn_ab"
+       android:layout_alignParentRight="true"
+       android:text="Auto Follow" />
+
+   <Button
+       android:id="@+id/btn_al"
+       android:layout_width="@android:dimen/thumbnail_width"
+       android:layout_height="wrap_content"
+       android:layout_below="@id/btn_af"
+       android:layout_alignParentRight="true"
+       android:text="Auto Line" />
+
+
+</RelativeLayout>
