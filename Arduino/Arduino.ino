@@ -1,9 +1,10 @@
+#include <Arduino_FreeRTOS.h>
 #include <NewPing.h>
 #include <Servo.h>
 #include <SoftwareSerial.h>
 #include <Wire.h>
-#include <ArduinoJson.h>
-SoftwareSerial bluetooth(9, 8);
+#include <task.h>
+
 #define IN1 3
 #define IN2 5
 #define IN3 6
@@ -19,25 +20,29 @@ SoftwareSerial bluetooth(9, 8);
 #define AUTO_LINE 1
 #define AUTO_OBSTACLE 2
 #define AUTO_FOLLOW 3
-#define MAX_DISTANCE 200 // Max distance for obstacle detection
+#define MAX_DISTANCE 200  
 #define gocTruoc 72
+
+SoftwareSerial bluetooth(9, 8);
 NewPing sonar(trig, echo, MAX_DISTANCE);
-Servo myServo;
-char command;
-char temp = 'S';
-int Speed = 100;
-int mode = CONTROL_MODE;
-int distance = 100;
-int distanceL = 100;
-int distanceR = 100;
-int Dleft_sensor;
-int Dright_sensor;
-int Uleft_sensor;
-int Uright_sensor;
-int run = 0;
-String json;
-String jsonTemp;
-bool bluetoothOn = false;
+volatile Servo myServo;
+
+TaskHandle_t xTaskHandleConnect;
+TaskHandle_t xTaskHandleControl;
+
+volatile char command;
+volatile char temp = 'S';
+volatile int Speed = 100;
+volatile int mode = CONTROL_MODE;
+
+volatile int run = 0;
+
+volatile bool wireOn = true;
+volatile bool bluetoothOn = true;
+volatile bool isHandle = false;
+
+String json = "";
+
 void forward();
 void back();
 void left();
@@ -49,30 +54,62 @@ void setup() {
   pinMode(IN4, OUTPUT);
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
-   bluetooth.begin(9600);
-  myServo.attach(servoPin);
-  myServo.write(gocTruoc);
+
+  bluetooth.begin(9600);
+
   pinMode(DR_S, INPUT);
   pinMode(DL_S, INPUT);
   pinMode(UR_S, INPUT);
   pinMode(UL_S, INPUT);
-  Wire.begin(100);   
+
+  Wire.begin(100);
+  Wire.onReceive(receiveEvent);
+  Wire.onRequest(requestEvent);
+
+  xTaskCreate(vConnectTask, "Task1", 64, NULL, configMAX_PRIORITIES - 1, &xTaskHandleConnect);
+  xTaskCreate(vHandleTask, "Task2", 400, NULL, configMAX_PRIORITIES - 1, &xTaskHandleControl);
+  vTaskSuspend(xTaskHandleControl);
+
+  delay(10);
+  vTaskStartScheduler();
 }
 
 void loop() {
-    Wire.onReceive(receiveEvent);
-    Wire.onRequest(requestEvent);
-    if (bluetooth.available() > 0) {
-      bluetoothOn = true;
-      command = bluetooth.read();
-      Serial.println(command);
-    }else {
-      bluetoothOn = false;
+}
+
+void vConnectTask(void* pvParameters) {
+  for (;;) {
+    if (bluetoothOn) {  
+      if (bluetooth.available() > 0) {
+        command = bluetooth.read();
+        Serial.println(command);
+        if (wireOn) {
+          wireOn = false;
+          Wire.end();
+        }
+        if(!isHandle) {
+          isHandle = true;
+          vTaskResume(xTaskHandleControl);
+        }
+      }
+    } else {
+      if (!wireOn) {
+        wireOn = true;
+        Wire.begin(100);
+        Wire.onReceive(receiveEvent);
+        Wire.onRequest(requestEvent);
+      }
     }
-    if(command != temp) {
+  }
+}
+
+void vHandleTask(void* pvParameters) {
+  for (;;) {
+    if (command != temp) {
       Stop();
     }
-   switch (command) {
+
+    switch (command) {
       case 'X':
         myServo.detach();
         Speed = 150;
@@ -80,48 +117,48 @@ void loop() {
         temp = 'X';
         break;
       case 'Y':
-      myServo.detach();
+        myServo.detach();
         Speed = 100;
-         temp = 'Y';
+        temp = 'Y';
         mode = AUTO_LINE;
         break;
       case 'Z':
-      myServo.attach(servoPin);
+        myServo.attach(servoPin);
         Speed = 100;
         mode = AUTO_OBSTACLE;
-         temp = 'Z';
-        myServo.attach(servoPin);
+        temp = 'Z';
+        myServo.write(gocTruoc);
         break;
       case 'T':
-      myServo.attach(servoPin);
+        myServo.attach(servoPin);
         Speed = 100;
         mode = AUTO_FOLLOW;
-         temp = 'T';
+        temp = 'T';
         myServo.write(gocTruoc);
         break;
       case 'F':
-      myServo.detach();
+        myServo.detach();
         Speed = 150;
         forward();
         temp = 'F';
         mode = CONTROL_MODE;
         break;
       case 'B':
-      myServo.detach();
+        myServo.detach();
         Speed = 150;
         back();
         temp = 'B';
         mode = CONTROL_MODE;
         break;
       case 'L':
-      myServo.detach();
+        myServo.detach();
         Speed = 150;
         left();
         temp = 'L';
         mode = CONTROL_MODE;
         break;
       case 'R':
-      myServo.detach();
+        myServo.detach();
         Speed = 150;
         right();
         temp = 'R';
@@ -131,149 +168,135 @@ void loop() {
         Stop();
         temp = 'S';
         break;
+      case 'D':
+        bluetoothOn = false;
+        break;
     }
     if (mode == AUTO_LINE) {
-    AutoLine();
-  } else if (mode == AUTO_OBSTACLE) {
-    AutoObstacle();
-  } else if (mode == AUTO_FOLLOW) {
-    AutoFollow();
-  } 
+      AutoLine();
+    } else if (mode == AUTO_OBSTACLE) {
+      AutoObstacle();
+    } else if (mode == AUTO_FOLLOW) {
+      AutoFollow();
+    }
+  }
 }
 void AutoLine() {
-  DynamicJsonDocument jsonDoc(256);
+  int Dleft_sensor;
+  int Dright_sensor;
   Dleft_sensor = digitalRead(DL_S);
   Dright_sensor = digitalRead(DR_S);
   if (Dleft_sensor == 0 && Dright_sensor == 1) {
-    if (run != 3 ) {
+    if (run != 3) {
       Stop();
       back();
-      delay(100);
+      vTaskDelay(100 / portTICK_PERIOD_MS);
       Stop();
     }
     right();
-    jsonDoc["Dl"] = Dleft_sensor;
-    jsonDoc["Dr"] = Dright_sensor;
-    serializeJson(jsonDoc, jsonTemp);
-    json = jsonTemp;
-    delay(200);
+    json = "{\"Dl\":" + String(Dleft_sensor) + ",\"Dr\":" + String(Dright_sensor) + "}";
+    Serial.println(json);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
   } else if (Dleft_sensor == 1 && Dright_sensor == 0) {
-    if (run != 4 ) {
+    if (run != 4) {
       Stop();
       back();
-      delay(100);
+      vTaskDelay(100 / portTICK_PERIOD_MS);
       Stop();
     }
     left();
-    jsonDoc["Dl"] = Dleft_sensor;
-    jsonDoc["Dr"] = Dright_sensor;
-    serializeJson(jsonDoc, jsonTemp);
-    json = jsonTemp;
-    delay(200);
+    json = "{\"Dl\":" + String(Dleft_sensor) + ",\"Dr\":" + String(Dright_sensor) + "}";
+    Serial.println(json);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
   } else {
-    if (run != 1 ) {
+    if (run != 1) {
       Stop();
-      delay(100);
+      vTaskDelay(100 / portTICK_PERIOD_MS);
     }
     forward();
   }
-  jsonTemp = "";
 }
+
 void AutoObstacle() {
+  int distance = 100;
+  int distanceL = 100;
+  int distanceR = 100;
   distance = readPing();
-if (distance <= 15) {
+  if (distance <= 15) {
     Stop();
-    delay(100);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
     back();
-    delay(300);
+    vTaskDelay(300 / portTICK_PERIOD_MS);
     Stop();
-    delay(100);
-    DynamicJsonDocument jsonDoc(256);
-    jsonDoc["d"] = distance;
+    vTaskDelay(100 / portTICK_PERIOD_MS);
     distanceR = lookR();
-    delay(200);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
     distanceL = lookL();
-    jsonDoc["dR"] = distanceR;
-    jsonDoc["dL"] = distanceL;
-    serializeJson(jsonDoc, json);
-    delay(200);
+    json = "{\"d\":" + String(distance) + ",\"dR\":" + String(distanceR) + ",\"dL\":" + String(distanceL) + "}";
+    Serial.println(json);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
     if (distanceR >= distanceL) {
       Stop();
       right();
-      delay(1000);
+      vTaskDelay(1000 / portTICK_PERIOD_MS);
       Stop();
     } else {
       Stop();
       left();
-      delay(1000);
+      vTaskDelay(1000 / portTICK_PERIOD_MS);
       Stop();
     }
   } else {
     forward();
   }
 }
+
 void AutoFollow() {
-  DynamicJsonDocument jsonDoc(256);
-  jsonTemp = "";
+  int distance = 100;
+  int Uleft_sensor;
+  int Uright_sensor;
   distance = readPing();
   Uright_sensor = digitalRead(UR_S);
   Uleft_sensor = digitalRead(UL_S);
   if (Uleft_sensor != 0 && Uright_sensor != 0) {
     if (distance <= 8) {
-      if (run != 2 ) {
+      if (run != 2) {
         Stop();
-        delay(100);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
       }
-      jsonDoc["d"] = distance;
-      jsonDoc["Ur"] = Uright_sensor;
-      jsonDoc["Ul"] = Uleft_sensor;
-      serializeJson(jsonDoc, jsonTemp);
-  json = jsonTemp;
+      json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
       back();
     } else if (distance <= 25 && distance > 12) {
-      if (run != 1 ) {
+      if (run != 1) {
         Stop();
-        delay(100);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
       }
-      jsonDoc["d"] = distance;
-      jsonDoc["Ur"] = Uright_sensor;
-      jsonDoc["Ul"] = Uleft_sensor;
-      serializeJson(jsonDoc, jsonTemp);
-      json = jsonTemp;
+      json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
       forward();
     } else {
       Stop();
     }
   } else if (Uleft_sensor == 0 && Uright_sensor != 0) {
-    if (run != 3 ) {
+    if (run != 3) {
       Stop();
-      delay(100);
+      vTaskDelay(100 / portTICK_PERIOD_MS);
     }
-    jsonDoc["d"] = distance;
-    jsonDoc["Ur"] = Uright_sensor;
-    jsonDoc["Ul"] = Uleft_sensor;
-    serializeJson(jsonDoc, jsonTemp);
-    json = jsonTemp;
+    json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
     right();
   } else if (Uleft_sensor != 0 && Uright_sensor == 0) {
-    if (run != 4 ) {
+    if (run != 4) {
       Stop();
-      delay(100);
+      vTaskDelay(100 / portTICK_PERIOD_MS);
     }
-    jsonDoc["d"] = distance;
-    jsonDoc["Ur"] = Uright_sensor;
-    jsonDoc["Ul"] = Uleft_sensor;
-    serializeJson(jsonDoc, jsonTemp);
-    json = jsonTemp;
+    json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
     left();
   } else if (Uleft_sensor == 0 && Uright_sensor == 0) {
     Stop();
   }
-  jsonTemp = "";
 }
 
 int readPing() {
-  delay(70);
+  vTaskDelay(70 / portTICK_PERIOD_MS);
   int cm = sonar.ping_cm();
   if (cm == 0) {
     cm = 250;
@@ -283,18 +306,18 @@ int readPing() {
 
 int lookR() {
   myServo.write(gocTruoc - 50);
-  delay(250);
+  vTaskDelay(250 / portTICK_PERIOD_MS);
   int distance = readPing();
-  delay(200);
+  vTaskDelay(200 / portTICK_PERIOD_MS);
   myServo.write(gocTruoc);
   return distance;
 }
 
 int lookL() {
   myServo.write(gocTruoc + 50);
-  delay(250);
+  vTaskDelay(250 / portTICK_PERIOD_MS);
   int distance = readPing();
-  delay(200);
+  vTaskDelay(200 / portTICK_PERIOD_MS);
   myServo.write(gocTruoc);
   return distance;
 }
@@ -329,20 +352,34 @@ void Stop() {
 }
 
 void receiveEvent(int howMany) {
-  while (0 < Wire.available() && !bluetoothOn) {
-    command = Wire.read();      
+  if (bluetoothOn) {
+    bluetoothOn = false;
+  }
+  if(!isHandle) {
+    isHandle = true;
+    vTaskResume(xTaskHandleControl);
+  }
+  while (0 < Wire.available()) {
+    command = Wire.read();
+    Serial.println(command);
+  }
+
+  if(command == 'D') {
+    wireOn = false;
+    Wire.end();
+    command = 'S';
+    bluetoothOn = true;
   }
 }
 
 void requestEvent() {
-  if(!json.equals("")) {
-    if(json.length() < 32) {
-    for(int i = json.length() + 1; i <= 32; i++) {
-      json += " ";
+  // if (json[0] == '{') {
+    if (json.length() < 32) {
+      for (int i = json.length() + 1; i <= 32; i++) {
+        json += " ";
+      }
     }
-   }
-    Wire.write(json.c_str()); 
-   json = "";
-  }
-  
+    Wire.write(json.c_str());
+    json = "";
+  // }
 }

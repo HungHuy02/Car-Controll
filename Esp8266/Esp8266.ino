@@ -1,65 +1,87 @@
+#include <WebSocketsClient.h>
+#include <SocketIOclient.h>
 #include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>
-#include <WiFiClient.h>
 #include <Wire.h>
 #include <ArduinoJson.h>
 
-const char *ssid = "Student";
+const char *ssid = "student";
 const char *password = ""; 
-const char *apiEndpoint = "https://bugnef-be-xedieukhien.onrender.com/cars";
-const char *apiUpdate = "https://bugnef-be-xedieukhien.onrender.com/parameters/update";
 std::unique_ptr<BearSSL::WiFiClientSecure>client(new BearSSL::WiFiClientSecure);
-HTTPClient http;
 String data;
-char c;
+char temp = 'A';
+SocketIOclient socketIO;
+
+void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length) {
+    switch(type) {
+        case sIOtype_DISCONNECT:
+            Serial.printf("[IOc] Disconnected!\n");
+            break;
+        case sIOtype_CONNECT:
+            socketIO.send(sIOtype_CONNECT, "/car-active");
+            break;
+        case sIOtype_EVENT:
+            data = String((char *)payload);
+            if(data.indexOf("parameters") == -1) {
+              temp = data[31];
+              Wire.beginTransmission(100);
+              Wire.write(temp); 
+              Wire.endTransmission();
+            }
+            break;
+        case sIOtype_ACK:
+            Serial.printf("[IOc] get ack: %u\n", length);
+            hexdump(payload, length);
+            break;
+        case sIOtype_ERROR:
+            Serial.printf("[IOc] get error: %u\n", length);
+            hexdump(payload, length);
+            break;
+        case sIOtype_BINARY_EVENT:
+            Serial.printf("[IOc] get binary: %u\n", length);
+            hexdump(payload, length);
+            break;
+        case sIOtype_BINARY_ACK:
+            Serial.printf("[IOc] get binary ack: %u\n", length);
+            hexdump(payload, length);
+            break;
+    }
+}
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600); 
   Wire.begin(D1, D2);
   WiFi.begin(ssid, password);
 
+  Serial.print("Connecting to WiFi...");
   while (WiFi.status() != WL_CONNECTED) {
     delay(250);
     Serial.print(".");
   }
+  Serial.println("Connected to WiFi");
   client->setInsecure();
-  http.begin(*client ,apiEndpoint);
+  socketIO.beginSSL("bugnef-be-xedieukhien.onrender.com", 443, "/socket.io/?EIO=4");
+  socketIO.onEvent(socketIOEvent);
 }
 
 void loop() {
-  getAndSendData();
- if(data.equals("Y") || data.equals("Z") || data.equals("T")) {
-  getAndPutData();
- }
-}
-
-void getAndSendData() {
-  int httpResponseCode = http.GET();
-  String payload = "{}"; 
-   DynamicJsonDocument jsonDoc(256);
-   Serial.println(httpResponseCode);
-  if (httpResponseCode > 0) {
-     deserializeJson(jsonDoc, http.getString());
-      data = String(jsonDoc["data"]);
-      Wire.beginTransmission(100); 
-      Wire.write(data.c_str()); 
-      Wire.endTransmission();
+  socketIO.loop();
+  if(temp == 'Y' || temp == 'Z' || temp == 'T') {
+    getAndPutData();
   }
 }
 
 void getAndPutData() {
   char c;
   String json = "";
-    Wire.requestFrom(100, 32);
-     while(Wire.available() > 0){
-      c = Wire.read();
-      json += c;
-   }
-      http.end();
-    http.begin(*client ,apiUpdate);
-    http.addHeader("Content-Type", "application/json");
-    int httpResponseCode = http.PUT(json);
-    String response = http.getString();
-    http.end();
-    http.begin(*client ,apiEndpoint);
+  Wire.requestFrom(100, 32);
+  delay(100);
+  while(Wire.available() > 0){
+    c = Wire.read();
+    json += c;
+  }
+  if(json[0] != ' ' && json[1] != ' ') {
+    String payload = "/car-active,[\"update-parameters\"," + json + "]";
+    Serial.println(payload);
+    socketIO.sendEVENT(payload);
+  }
  }

@@ -1,87 +1,63 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<android.support.constraint.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/activity_main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:backgroundTintMode="src_in"
-    tools:context=".MainActivity">
+    tools:context=".MainActivity"
+    android:layout_margin="16dp">
 
-   <TextView
-       android:id="@+id/tv"
-       android:layout_width="wrap_content"
-       android:layout_height="wrap_content"
-       android:layout_alignParentLeft="true"
-       android:layout_alignParentRight="true"
-       android:layout_marginTop="10dp"
-       android:textAlignment="center" />
+   <io.github.controlwear.virtual.joystick.android.JoystickView
+       android:id="@+id/jv"
+       android:layout_width="200dp"
+       android:layout_height="200dp"
+       app:JV_backgroundColor="#009688"
+       app:JV_borderColor="#00796B"
+       app:JV_borderWidth="4dp"
+       app:JV_buttonColor="#FF6E40"
+       app:JV_buttonSizeRatio="15%"
+       app:JV_fixedCenter="false"
+       app:layout_constraintBottom_toBottomOf="parent"
+       app:layout_constraintStart_toStartOf="parent"
+       app:layout_constraintTop_toTopOf="parent" />
 
    <TextView
        android:id="@+id/tv_status"
        android:layout_width="192dp"
        android:layout_height="wrap_content"
-       android:layout_below="@+id/tv"
-       android:layout_alignStart="@+id/btn_wifi"
-       android:layout_alignParentRight="true"
-       android:layout_marginStart="0dp"
+       android:layout_marginTop="40dp"
        android:text="Not connected"
-       android:textAlignment="center" />
+       android:textAlignment="center"
+       app:layout_constraintTop_toTopOf="parent"
+       app:layout_constraintRight_toRightOf="parent"/>
 
-   <Button
-       android:id="@+id/btn_up"
-       android:layout_width="wrap_content"
+   <TextView
+       android:id="@+id/tv"
+       android:layout_width="192dp"
        android:layout_height="wrap_content"
-       android:layout_marginTop="70dp"
-       android:layout_toRightOf="@id/btn_left"
-       android:text="Lên" />
-
-   <Button
-       android:id="@+id/btn_stop"
-       android:layout_width="wrap_content"
-       android:layout_height="wrap_content"
-       android:layout_below="@id/btn_up"
-       android:layout_toRightOf="@id/btn_left"
-       android:text="Stop" />
-
-
-   <Button
-       android:id="@+id/btn_down"
-       android:layout_width="wrap_content"
-       android:layout_height="wrap_content"
-       android:layout_below="@id/btn_stop"
-       android:layout_toRightOf="@id/btn_left"
-       android:text="Xuống" />
-
-   <Button
-       android:id="@+id/btn_left"
-       android:layout_width="wrap_content"
-       android:layout_height="wrap_content"
-       android:layout_below="@id/btn_up"
-       android:layout_marginLeft="20dp"
-       android:text="Trái" />
-
-   <Button
-       android:id="@+id/btn_right"
-       android:layout_width="wrap_content"
-       android:layout_height="wrap_content"
-       android:layout_above="@id/btn_down"
-       android:layout_toRightOf="@id/btn_up"
-       android:text="Phải" />
+       android:layout_marginTop="24dp"
+       android:text="Not connected"
+       android:textAlignment="center"
+       app:layout_constraintTop_toTopOf="parent"
+       app:layout_constraintRight_toRightOf="parent"
+       app:layout_constraintLeft_toLeftOf="parent"/>
 
    <Button
        android:id="@+id/btn_wifi"
        android:layout_width="@android:dimen/thumbnail_width"
        android:layout_height="wrap_content"
-       android:layout_alignParentRight="true"
-       android:layout_marginTop="60dp"
+       app:layout_constraintTop_toBottomOf="@+id/tv_status"
+       app:layout_constraintRight_toRightOf="parent"
        android:text="Wifi" />
 
    <Button
        android:id="@+id/btn_bluetooth"
        android:layout_width="@android:dimen/thumbnail_width"
        android:layout_height="wrap_content"
-       android:layout_below="@id/btn_wifi"
+       app:layout_constraintTop_toBottomOf="@+id/btn_wifi"
+       app:layout_constraintRight_toRightOf="parent"
        android:layout_alignParentRight="true"
        android:text="Bluetooth" />
 
@@ -89,7 +65,8 @@
        android:id="@+id/btn_ab"
        android:layout_width="@android:dimen/thumbnail_width"
        android:layout_height="wrap_content"
-       android:layout_below="@id/btn_bluetooth"
+       app:layout_constraintTop_toBottomOf="@+id/btn_bluetooth"
+       app:layout_constraintRight_toRightOf="parent"
        android:layout_alignParentRight="true"
        android:text="Auto Obstacle" />
 
@@ -97,7 +74,8 @@
        android:id="@+id/btn_af"
        android:layout_width="@android:dimen/thumbnail_width"
        android:layout_height="wrap_content"
-       android:layout_below="@id/btn_ab"
+       app:layout_constraintTop_toBottomOf="@+id/btn_ab"
+       app:layout_constraintRight_toRightOf="parent"
        android:layout_alignParentRight="true"
        android:text="Auto Follow" />
 
@@ -105,9 +83,10 @@
        android:id="@+id/btn_al"
        android:layout_width="@android:dimen/thumbnail_width"
        android:layout_height="wrap_content"
-       android:layout_below="@id/btn_af"
+       app:layout_constraintTop_toBottomOf="@+id/btn_af"
+       app:layout_constraintRight_toRightOf="parent"
        android:layout_alignParentRight="true"
        android:text="Auto Line" />
 
 
-</RelativeLayout>
+</android.support.constraint.ConstraintLayout>
