@@ -2,6 +2,7 @@ package com.example.carcontrol;
 
 
 import android.Manifest;
+import android.animation.ObjectAnimator;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
@@ -17,6 +18,8 @@ import android.support.annotation.RequiresApi;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.ListView;
 import android.widget.Toast;
 
@@ -43,6 +46,10 @@ public class BluetoothActivity extends AppCompatActivity {
 
     private ConnectedThread thread;
 
+    private ImageButton refreshBtn;
+    private Boolean isDiscovery = true;
+
+    private ObjectAnimator objectAnimator;
     private final UUID uuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
 
@@ -51,6 +58,10 @@ public class BluetoothActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_bluetooth);
+
+        refreshBtn = findViewById(R.id.refresh_btn);
+
+
 
         pairedList = findViewById(R.id.pairedList);
         discoveredList = findViewById(R.id.discorveryList);
@@ -89,6 +100,23 @@ public class BluetoothActivity extends AppCompatActivity {
             }
         }
 
+        refreshBtn.setOnClickListener(v -> {
+            if (isDiscovery) {
+                bluetoothAdapter.cancelDiscovery();
+                objectAnimator.cancel();
+            } else {
+                discoveredArrayAdapter.clear();
+                discoveredDevicesList.clear();
+                bluetoothAdapter.startDiscovery();
+                objectAnimator.start();
+            }
+            isDiscovery = !isDiscovery;
+        });
+
+        objectAnimator = ObjectAnimator.ofFloat(refreshBtn, "rotation", 0f, 360f);
+        objectAnimator.setDuration(12000);
+        objectAnimator.setRepeatCount(ObjectAnimator.INFINITE);
+
         IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_FOUND);
         registerReceiver(receiver, filter);
 
@@ -97,6 +125,7 @@ public class BluetoothActivity extends AppCompatActivity {
             startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
         }else {
             fetchDevice();
+            objectAnimator.start();
         }
     }
 
@@ -135,6 +164,7 @@ public class BluetoothActivity extends AppCompatActivity {
         }
         bluetoothAdapter.startDiscovery();
     }
+
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
@@ -144,7 +174,6 @@ public class BluetoothActivity extends AppCompatActivity {
                     device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice.class);
                 }else {
                     device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-
                 }
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -157,10 +186,13 @@ public class BluetoothActivity extends AppCompatActivity {
                                 1);
                     }
                 }
-                discoveredArrayAdapter.add(device.getName()
-                        + "\n" + device.getAddress());
-                discoveredDevicesList.add(device);
-                discoveredArrayAdapter.notifyDataSetChanged();
+
+                if(!discoveredDevicesList.contains(device)) {
+                    discoveredDevicesList.add(device);
+                    discoveredArrayAdapter.add(device.getName()
+                            + "\n" + device.getAddress());
+                    discoveredArrayAdapter.notifyDataSetChanged();
+                }
             }
         }
     };
@@ -190,6 +222,7 @@ public class BluetoothActivity extends AppCompatActivity {
                 bluetoothSocket.close();
             } catch (IOException closeException) {
                 // Ignore
+                e.printStackTrace();
             }
         }
     }
@@ -205,8 +238,6 @@ public class BluetoothActivity extends AppCompatActivity {
             if(resultCode == RESULT_OK){
                 showToast("Bluetooth is enabled.");
                 fetchDevice();
-            } else if (resultCode == 300) {
-
             } else {
                 showToast("Bluetooth enabling is canceled.");
                 finish();
