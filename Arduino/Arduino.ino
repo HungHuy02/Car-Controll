@@ -4,6 +4,7 @@
 #include <SoftwareSerial.h>
 #include <Wire.h>
 #include <task.h>
+#include <queue.h>
 
 #define IN1 3
 #define IN2 5
@@ -20,7 +21,7 @@
 #define AUTO_LINE 1
 #define AUTO_OBSTACLE 2
 #define AUTO_FOLLOW 3
-#define MAX_DISTANCE 200  
+#define MAX_DISTANCE 200
 #define gocTruoc 72
 
 SoftwareSerial bluetooth(9, 8);
@@ -29,8 +30,12 @@ volatile Servo myServo;
 
 TaskHandle_t xTaskHandleConnect;
 TaskHandle_t xTaskHandleControl;
+TaskHandle_t xTaskHandleData;
+TaskHandle_t xTaskAuto;
 
-volatile char command;
+QueueHandle_t queueCommand;
+QueueHandle_t queueJson;
+
 volatile char temp = 'S';
 volatile int Speed = 100;
 volatile int mode = CONTROL_MODE;
@@ -40,8 +45,6 @@ volatile int run = 0;
 volatile bool wireOn = true;
 volatile bool bluetoothOn = true;
 volatile bool isHandle = false;
-
-String json = "";
 
 void forward();
 void back();
@@ -54,20 +57,21 @@ void setup() {
   pinMode(IN4, OUTPUT);
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
-
-  bluetooth.begin(9600);
-
   pinMode(DR_S, INPUT);
   pinMode(DL_S, INPUT);
   pinMode(UR_S, INPUT);
   pinMode(UL_S, INPUT);
-
+  myServo.attach(servoPin);
+  bluetooth.begin(9600);
   Wire.begin(100);
   Wire.onReceive(receiveEvent);
   Wire.onRequest(requestEvent);
 
+  queueCommand = xQueueCreate(10, sizeof(char));
+  queueJson = xQueueCreate(10, sizeof(String));
+
   xTaskCreate(vConnectTask, "Task1", 64, NULL, configMAX_PRIORITIES - 1, &xTaskHandleConnect);
-  xTaskCreate(vHandleTask, "Task2", 400, NULL, configMAX_PRIORITIES - 1, &xTaskHandleControl);
+  xTaskCreate(vHandleTask, "Task2", 320, NULL, configMAX_PRIORITIES - 1, &xTaskHandleControl);
   vTaskSuspend(xTaskHandleControl);
 
   delay(10);
@@ -79,15 +83,16 @@ void loop() {
 
 void vConnectTask(void* pvParameters) {
   for (;;) {
-    if (bluetoothOn) {  
+    if (bluetoothOn) {
       if (bluetooth.available() > 0) {
-        command = bluetooth.read();
+        char command = bluetooth.read();
+        xQueueSendToBack(queueCommand, &command, portMAX_DELAY);
         Serial.println(command);
         if (wireOn) {
           wireOn = false;
           Wire.end();
         }
-        if(!isHandle) {
+        if (!isHandle) {
           isHandle = true;
           vTaskResume(xTaskHandleControl);
         }
@@ -104,9 +109,12 @@ void vConnectTask(void* pvParameters) {
 }
 
 void vHandleTask(void* pvParameters) {
+  char command, temp;
   for (;;) {
-    if (command != temp) {
-      Stop();
+    if (xQueueReceive(queueCommand, &command, portMAX_DELAY) == pdPASS) {
+      if (command != temp) {
+        Stop();
+      }
     }
 
     switch (command) {
@@ -181,9 +189,11 @@ void vHandleTask(void* pvParameters) {
     }
   }
 }
+
 void AutoLine() {
   int Dleft_sensor;
   int Dright_sensor;
+  String json;
   Dleft_sensor = digitalRead(DL_S);
   Dright_sensor = digitalRead(DR_S);
   if (Dleft_sensor == 0 && Dright_sensor == 1) {
@@ -195,6 +205,7 @@ void AutoLine() {
     }
     right();
     json = "{\"Dl\":" + String(Dleft_sensor) + ",\"Dr\":" + String(Dright_sensor) + "}";
+    xQueueSendToBack(queueJson, &json, portMAX_DELAY);
     Serial.println(json);
     vTaskDelay(200 / portTICK_PERIOD_MS);
   } else if (Dleft_sensor == 1 && Dright_sensor == 0) {
@@ -206,6 +217,7 @@ void AutoLine() {
     }
     left();
     json = "{\"Dl\":" + String(Dleft_sensor) + ",\"Dr\":" + String(Dright_sensor) + "}";
+    xQueueSendToBack(queueJson, &json, portMAX_DELAY);
     Serial.println(json);
     vTaskDelay(200 / portTICK_PERIOD_MS);
   } else {
@@ -218,6 +230,7 @@ void AutoLine() {
 }
 
 void AutoObstacle() {
+  String json;
   int distance = 100;
   int distanceL = 100;
   int distanceR = 100;
@@ -233,6 +246,7 @@ void AutoObstacle() {
     vTaskDelay(200 / portTICK_PERIOD_MS);
     distanceL = lookL();
     json = "{\"d\":" + String(distance) + ",\"dR\":" + String(distanceR) + ",\"dL\":" + String(distanceL) + "}";
+    xQueueSendToBack(queueJson, &json, portMAX_DELAY);
     Serial.println(json);
     vTaskDelay(200 / portTICK_PERIOD_MS);
     if (distanceR >= distanceL) {
@@ -252,6 +266,7 @@ void AutoObstacle() {
 }
 
 void AutoFollow() {
+  String json;
   int distance = 100;
   int Uleft_sensor;
   int Uright_sensor;
@@ -265,6 +280,7 @@ void AutoFollow() {
         vTaskDelay(100 / portTICK_PERIOD_MS);
       }
       json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
+      xQueueSendToBack(queueJson, &json, portMAX_DELAY);
       back();
     } else if (distance <= 25 && distance > 12) {
       if (run != 1) {
@@ -272,6 +288,7 @@ void AutoFollow() {
         vTaskDelay(100 / portTICK_PERIOD_MS);
       }
       json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
+      xQueueSendToBack(queueJson, &json, portMAX_DELAY);
       forward();
     } else {
       Stop();
@@ -282,6 +299,7 @@ void AutoFollow() {
       vTaskDelay(100 / portTICK_PERIOD_MS);
     }
     json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
+    xQueueSendToBack(queueJson, &json, portMAX_DELAY);
     right();
   } else if (Uleft_sensor != 0 && Uright_sensor == 0) {
     if (run != 4) {
@@ -289,6 +307,7 @@ void AutoFollow() {
       vTaskDelay(100 / portTICK_PERIOD_MS);
     }
     json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
+    xQueueSendToBack(queueJson, &json, portMAX_DELAY);
     left();
   } else if (Uleft_sensor == 0 && Uright_sensor == 0) {
     Stop();
@@ -352,34 +371,47 @@ void Stop() {
 }
 
 void receiveEvent(int howMany) {
+  char command;
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
   if (bluetoothOn) {
     bluetoothOn = false;
   }
-  if(!isHandle) {
+  if (!isHandle) {
     isHandle = true;
     vTaskResume(xTaskHandleControl);
   }
   while (0 < Wire.available()) {
     command = Wire.read();
     Serial.println(command);
+    xQueueSendToBackFromISR(queueCommand, &command, &xHigherPriorityTaskWoken);
   }
 
-  if(command == 'D') {
+  if (command == 'D') {
     wireOn = false;
     Wire.end();
     command = 'S';
     bluetoothOn = true;
   }
+
+  if( xHigherPriorityTaskWoken )
+    {
+      taskYIELD ();
+    }
 }
 
 void requestEvent() {
-  // if (json[0] == '{') {
+  String json;
+  BaseType_t xTaskWokenByReceive  = pdFALSE;
+  if (xQueueReceiveFromISR(queueJson, &json, &xTaskWokenByReceive)) {
     if (json.length() < 32) {
       for (int i = json.length() + 1; i <= 32; i++) {
         json += " ";
       }
     }
     Wire.write(json.c_str());
-    json = "";
-  // }
+  }
+  if( xTaskWokenByReceive != pdFALSE )
+    {
+      taskYIELD ();
+    }
 }

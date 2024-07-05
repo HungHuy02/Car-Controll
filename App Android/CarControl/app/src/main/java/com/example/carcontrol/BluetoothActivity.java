@@ -60,9 +60,6 @@ public class BluetoothActivity extends AppCompatActivity {
         setContentView(R.layout.activity_bluetooth);
 
         refreshBtn = findViewById(R.id.refresh_btn);
-
-
-
         pairedList = findViewById(R.id.pairedList);
         discoveredList = findViewById(R.id.discorveryList);
 
