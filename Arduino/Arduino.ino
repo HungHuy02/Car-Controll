@@ -17,16 +17,12 @@
 #define echo A2
 #define trig A3
 #define servoPin 7
-#define CONTROL_MODE 0
-#define AUTO_LINE 1
-#define AUTO_OBSTACLE 2
-#define AUTO_FOLLOW 3
 #define MAX_DISTANCE 200
 #define gocTruoc 72
 
 SoftwareSerial bluetooth(9, 8);
 NewPing sonar(trig, echo, MAX_DISTANCE);
-volatile Servo myServo;
+Servo myServo;
 
 TaskHandle_t xTaskHandleConnect;
 TaskHandle_t xTaskHandleControl;
@@ -38,11 +34,11 @@ TaskHandle_t xTaskAutoObstacle = NULL;
 QueueHandle_t queueCommand;
 QueueHandle_t queueJson;
 
-int Speed = 100;
+byte Speed = 100;
 
-int run = 0;
+byte run = 0;
 
-bool wireOn = true;
+bool wifiOn = true;
 bool bluetoothOn = true;
 bool isHandle = false;
 bool isAuto = false;
@@ -53,7 +49,6 @@ void left();
 void right();
 
 void setup() {
-  Serial.begin(9600);
   pinMode(IN3, OUTPUT);
   pinMode(IN4, OUTPUT);
   pinMode(IN1, OUTPUT);
@@ -91,8 +86,8 @@ void vConnectTask(void* pvParameters) {
         char command = bluetooth.read();
         xQueueSendToBack(queueCommand, &command, portMAX_DELAY);
         Serial.println(command);
-        if (wireOn) {
-          wireOn = false;
+        if (wifiOn) {
+          wifiOn = false;
           Wire.end();
         }
         if (!isHandle) {
@@ -101,8 +96,8 @@ void vConnectTask(void* pvParameters) {
         }
       }
     } else {
-      if (!wireOn) {
-        wireOn = true;
+      if (wifiOn) {
+        wifiOn = true;
         Wire.begin(100);
         Wire.onReceive(receiveEvent);
         Wire.onRequest(requestEvent);
@@ -115,43 +110,35 @@ void vHandleData(void* pvParameters) {
   char command, temp;
   for (;;) {
     if (xQueueReceive(queueCommand, &command, portMAX_DELAY) == pdPASS) {
-      Serial.println("7");
       if (command != temp) {
         Stop();
-        if(isAuto) {
-          Serial.println("8");
+        if (isAuto) {
           isAuto = false;
-          vTaskDelete(xTaskHandleControl);
-          Serial.println("9");
           // vTaskDelete(xTaskAutoLine);
-          // Serial.println("10");
           // vTaskDelete(xTaskAutoObstacle);
-          // Serial.println("11");
           // vTaskDelete(xTaskAutoFollow);
-          // Serial.println("12");
+          vTaskDelete(xTaskHandleControl);
         }
       }
     }
-    Serial.println(command);
 
     switch (command) {
       case 'Y':
         myServo.detach();
         Speed = 100;
         temp = 'Y';
-        if(!isAuto) {
+        if (!isAuto) {
           isAuto = true;
-          xTaskCreate(vAutoLine, "Task4", 180, NULL, configMAX_PRIORITIES - 1, &xTaskAutoLine);
-          Serial.println("3");
+          xTaskCreate(vAutoLine, "Task4", 198, NULL, configMAX_PRIORITIES - 1, &xTaskAutoLine);
         }
         break;
       case 'Z':
         myServo.attach(servoPin);
         Speed = 100;
         temp = 'Z';
-        if(!isAuto) {
+        if (!isAuto) {
           isAuto = true;
-          xTaskCreate(vAutoObstacle, "Task5", 180, NULL, configMAX_PRIORITIES - 1, &xTaskAutoObstacle);
+          xTaskCreate(vAutoObstacle, "Task5", 198, NULL, configMAX_PRIORITIES - 1, &xTaskAutoObstacle);
         }
         myServo.write(gocTruoc);
         break;
@@ -159,9 +146,9 @@ void vHandleData(void* pvParameters) {
         myServo.attach(servoPin);
         Speed = 100;
         temp = 'T';
-        if(!isAuto) {
+        if (!isAuto) {
           isAuto = true;
-          xTaskCreate(vAutoFollow, "Task6", 180, NULL, configMAX_PRIORITIES - 1, &xTaskAutoFollow);
+          xTaskCreate(vAutoFollow, "Task6", 198, NULL, configMAX_PRIORITIES - 1, &xTaskAutoFollow);
         }
         myServo.write(gocTruoc);
         break;
@@ -230,7 +217,6 @@ void vHandleControl(void* pvParameters) {
 void vAutoLine(void* pvParameters) {
   int Dleft_sensor;
   int Dright_sensor;
-  String json;
   for (;;) {
     Dleft_sensor = digitalRead(DL_S);
     Dright_sensor = digitalRead(DR_S);
@@ -242,8 +228,10 @@ void vAutoLine(void* pvParameters) {
         Stop();
       }
       right();
-      json = "{\"Dl\":" + String(Dleft_sensor) + ",\"Dr\":" + String(Dright_sensor) + "}";
-      xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+      if (wifiOn) {
+        String json = "{\"Dl\":" + String(Dleft_sensor) + ",\"Dr\":" + String(Dright_sensor) + "}";
+        xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+      }
       vTaskDelay(200 / portTICK_PERIOD_MS);
     } else if (Dleft_sensor == 1 && Dright_sensor == 0) {
       if (run != 4) {
@@ -253,8 +241,10 @@ void vAutoLine(void* pvParameters) {
         Stop();
       }
       left();
-      json = "{\"Dl\":" + String(Dleft_sensor) + ",\"Dr\":" + String(Dright_sensor) + "}";
-      xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+      if (wifiOn) {
+        String json = "{\"Dl\":" + String(Dleft_sensor) + ",\"Dr\":" + String(Dright_sensor) + "}";
+        xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+      }
       vTaskDelay(200 / portTICK_PERIOD_MS);
     } else {
       if (run != 1) {
@@ -267,7 +257,6 @@ void vAutoLine(void* pvParameters) {
 }
 
 void vAutoObstacle() {
-  String json;
   int distance = 100;
   int distanceL = 100;
   int distanceR = 100;
@@ -282,9 +271,10 @@ void vAutoObstacle() {
     distanceR = lookR();
     vTaskDelay(200 / portTICK_PERIOD_MS);
     distanceL = lookL();
-    json = "{\"d\":" + String(distance) + ",\"dR\":" + String(distanceR) + ",\"dL\":" + String(distanceL) + "}";
-    xQueueSendToBack(queueJson, &json, portMAX_DELAY);
-    Serial.println(json);
+    if (wifiOn) {
+      String json = "{\"d\":" + String(distance) + ",\"dR\":" + String(distanceR) + ",\"dL\":" + String(distanceL) + "}";
+      xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+    }
     vTaskDelay(200 / portTICK_PERIOD_MS);
     if (distanceR >= distanceL) {
       Stop();
@@ -303,7 +293,6 @@ void vAutoObstacle() {
 }
 
 void vAutoFollow() {
-  String json;
   int distance = 100;
   int Uleft_sensor;
   int Uright_sensor;
@@ -316,16 +305,20 @@ void vAutoFollow() {
         Stop();
         vTaskDelay(100 / portTICK_PERIOD_MS);
       }
-      json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
-      xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+      if (wifiOn) {
+        String json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
+        xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+      }
       back();
     } else if (distance <= 25 && distance > 12) {
       if (run != 1) {
         Stop();
         vTaskDelay(100 / portTICK_PERIOD_MS);
       }
-      json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
-      xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+      if (wifiOn) {
+        String json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
+        xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+      }
       forward();
     } else {
       Stop();
@@ -335,16 +328,20 @@ void vAutoFollow() {
       Stop();
       vTaskDelay(100 / portTICK_PERIOD_MS);
     }
-    json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
-    xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+    if (wifiOn) {
+      String json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
+      xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+    }
     right();
   } else if (Uleft_sensor != 0 && Uright_sensor == 0) {
     if (run != 4) {
       Stop();
       vTaskDelay(100 / portTICK_PERIOD_MS);
     }
-    json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
-    xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+    if (wifiOn) {
+      String json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
+      xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+    }
     left();
   } else if (Uleft_sensor == 0 && Uright_sensor == 0) {
     Stop();
@@ -424,7 +421,7 @@ void receiveEvent(int howMany) {
   }
 
   if (command == 'D') {
-    wireOn = false;
+    wifiOn = false;
     Wire.end();
     command = 'S';
     bluetoothOn = true;
