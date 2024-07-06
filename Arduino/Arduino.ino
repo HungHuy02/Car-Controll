@@ -29,9 +29,9 @@ Servo myServo;
 TaskHandle_t xTaskHandleConnect;
 TaskHandle_t xTaskHandleControl;
 TaskHandle_t xTaskHandleData;
-TaskHandle_t xTaskAutoLine = NULL;
-TaskHandle_t xTaskAutoFollow = NULL;
-TaskHandle_t xTaskAutoObstacle = NULL;
+TaskHandle_t xTaskAutoLine;
+TaskHandle_t xTaskAutoFollow;
+TaskHandle_t xTaskAutoObstacle;
 
 QueueHandle_t queueCommand;
 QueueHandle_t queueJson;
@@ -62,10 +62,8 @@ void setup() {
   queueJson = xQueueCreate(3, sizeof(String));
 
   xTaskCreate(vConnectTask, "Task1", 60, NULL, configMAX_PRIORITIES - 1, &xTaskHandleConnect);
-  xTaskCreate(vHandleData, "Task2", 60, NULL, configMAX_PRIORITIES - 1, &xTaskHandleData);
+  xTaskCreate(vHandleData, "Task2", 64, NULL, configMAX_PRIORITIES - 1, &xTaskHandleData);
   vTaskSuspend(xTaskHandleData);
-  xTaskCreate(vHandleControl, "Task3", 64, NULL, configMAX_PRIORITIES - 1, &xTaskHandleControl);
-  vTaskSuspend(xTaskHandleControl);
 
   delay(10);
   vTaskStartScheduler();
@@ -102,22 +100,45 @@ void vConnectTask(void* pvParameters) {
 }
 
 void vHandleData(void* pvParameters) {
-  char command, temp;
+  char command = NULL;
+  char temp = NULL;
   for (;;) {
     if (xQueueReceive(queueCommand, &command, portMAX_DELAY) == pdPASS) {
-      if (command != temp) {
+      if (command != temp && temp != NULL) {
         Stop();
         if (isAuto) {
           isAuto = false;
-          // vTaskDelete(xTaskAutoLine);
-          // vTaskDelete(xTaskAutoObstacle);
-          // vTaskDelete(xTaskAutoFollow);
-          vTaskDelete(xTaskHandleControl);
+          switch (temp) {
+            case 'T':
+              vTaskDelete(xTaskAutoFollow);
+              break;
+            case 'Y':
+              vTaskDelete(xTaskAutoLine);
+              break;
+            case 'Z':
+              vTaskDelete(xTaskAutoObstacle);
+              break;
+            default:
+              vTaskDelete(xTaskHandleControl);
+          }
         }
       }
     }
 
     switch (command) {
+      case 'D':
+        bluetoothOn = false;
+        vTaskSuspend(NULL);
+        break;
+      case 'T':
+        myServo.attach(Servo_PIN);
+        temp = 'T';
+        if (!isAuto) {
+          isAuto = true;
+          xTaskCreate(vAutoFollow, "Task6", 198, NULL, configMAX_PRIORITIES - 1, &xTaskAutoFollow);
+        }
+        myServo.write(FRONT_ANGLE);
+        break;
       case 'Y':
         myServo.detach();
         temp = 'Y';
@@ -135,24 +156,12 @@ void vHandleData(void* pvParameters) {
         }
         myServo.write(FRONT_ANGLE);
         break;
-      case 'T':
-        myServo.attach(Servo_PIN);
-        temp = 'T';
-        if (!isAuto) {
-          isAuto = true;
-          xTaskCreate(vAutoFollow, "Task6", 198, NULL, configMAX_PRIORITIES - 1, &xTaskAutoFollow);
-        }
-        myServo.write(FRONT_ANGLE);
-        break;
-      case 'D':
-        bluetoothOn = false;
-        vTaskSuspend(NULL);
-        break;
       default:
         isAuto = false;
+        temp = 'F';
         myServo.detach();
         xQueueSendToFront(queueCommand, &command, portMAX_DELAY);
-        vTaskResume(xTaskHandleControl);
+        xTaskCreate(vHandleControl, "Task3", 64, NULL, configMAX_PRIORITIES - 1, &xTaskHandleControl);
         vTaskSuspend(NULL);
     }
   }
@@ -168,13 +177,17 @@ void vHandleControl(void* pvParameters) {
     }
 
     switch (command) {
-      case 'F':
-        forward(CONTROL_SPEED);
-        temp = 'F';
-        break;
       case 'B':
         back(CONTROL_SPEED);
         temp = 'B';
+        break;
+      case 'D':
+        bluetoothOn = false;
+        vTaskSuspend(NULL);
+        break;
+      case 'F':
+        forward(CONTROL_SPEED);
+        temp = 'F';
         break;
       case 'L':
         left(CONTROL_SPEED);
@@ -187,10 +200,6 @@ void vHandleControl(void* pvParameters) {
       case 'S':
         Stop();
         temp = 'S';
-        break;
-      case 'D':
-        bluetoothOn = false;
-        vTaskSuspend(NULL);
         break;
       default:
         isAuto = true;
