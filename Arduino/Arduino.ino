@@ -20,7 +20,7 @@
 #define MAX_DISTANCE 200
 #define FRONT_ANGLE 72
 #define CONTROL_SPEED 150
-#define AUTO_SPEED 100
+#define AUTO_SPEED 120
 
 SoftwareSerial bluetooth(9, 8);
 NewPing sonar(TRIG, ECHO, MAX_DISTANCE);
@@ -44,6 +44,7 @@ bool isHandle = false;
 bool isAuto = false;
 
 void setup() {
+  Serial.begin(9600);
   pinMode(IN3, OUTPUT);
   pinMode(IN4, OUTPUT);
   pinMode(IN1, OUTPUT);
@@ -61,7 +62,7 @@ void setup() {
   queueCommand = xQueueCreate(3, sizeof(char));
   queueJson = xQueueCreate(3, sizeof(String));
 
-  xTaskCreate(vConnectTask, "Task1", 60, NULL, configMAX_PRIORITIES - 1, &xTaskHandleConnect);
+  xTaskCreate(vConnectTask, "Task1", 64, NULL, configMAX_PRIORITIES - 1, &xTaskHandleConnect);
   xTaskCreate(vHandleData, "Task2", 64, NULL, configMAX_PRIORITIES - 1, &xTaskHandleData);
   vTaskSuspend(xTaskHandleData);
 
@@ -89,7 +90,7 @@ void vConnectTask(void* pvParameters) {
         }
       }
     } else {
-      if (wifiOn) {
+      if (!wifiOn) {
         wifiOn = true;
         Wire.begin(100);
         Wire.onReceive(receiveEvent);
@@ -125,9 +126,21 @@ void vHandleData(void* pvParameters) {
       }
     }
 
+    if (wifiOn) {
+      vTaskDelete(xTaskHandleConnect);
+    }
+
     switch (command) {
       case 'D':
-        bluetoothOn = false;
+        if (bluetoothOn) {
+          bluetoothOn = false;
+        } else {
+          wifiOn = false;
+          Wire.end();
+        }
+        isHandle = false;
+        xQueueReset(queueCommand);
+        xQueueReset(queueCommand);
         vTaskSuspend(NULL);
         break;
       case 'T':
@@ -135,8 +148,13 @@ void vHandleData(void* pvParameters) {
         temp = 'T';
         if (!isAuto) {
           isAuto = true;
-          xTaskCreate(vAutoFollow, "Task6", 198, NULL, configMAX_PRIORITIES - 1, &xTaskAutoFollow);
+          if (wifiOn) {
+            xTaskCreate(vAutoFollow, "Task6", 256, NULL, configMAX_PRIORITIES - 1, &xTaskAutoFollow);
+          } else {
+            xTaskCreate(vAutoFollow, "Task6", 198, NULL, configMAX_PRIORITIES - 1, &xTaskAutoFollow);
+          }
         }
+
         myServo.write(FRONT_ANGLE);
         break;
       case 'Y':
@@ -144,7 +162,13 @@ void vHandleData(void* pvParameters) {
         temp = 'Y';
         if (!isAuto) {
           isAuto = true;
-          xTaskCreate(vAutoLine, "Task4", 198, NULL, configMAX_PRIORITIES - 1, &xTaskAutoLine);
+          if (wifiOn) {
+            Serial.println("1");
+            xTaskCreate(vAutoLine, "Task4", 256, NULL, configMAX_PRIORITIES - 1, &xTaskAutoLine);
+            Serial.println("2");
+          } else {
+            xTaskCreate(vAutoLine, "Task4", 198, NULL, configMAX_PRIORITIES - 1, &xTaskAutoLine);
+          }
         }
         break;
       case 'Z':
@@ -152,7 +176,11 @@ void vHandleData(void* pvParameters) {
         temp = 'Z';
         if (!isAuto) {
           isAuto = true;
-          xTaskCreate(vAutoObstacle, "Task5", 198, NULL, configMAX_PRIORITIES - 1, &xTaskAutoObstacle);
+          if (wifiOn) {
+            xTaskCreate(vAutoObstacle, "Task5", 256, NULL, configMAX_PRIORITIES - 1, &xTaskAutoObstacle);
+          } else {
+            xTaskCreate(vAutoObstacle, "Task5", 198, NULL, configMAX_PRIORITIES - 1, &xTaskAutoObstacle);
+          }
         }
         myServo.write(FRONT_ANGLE);
         break;
@@ -182,7 +210,14 @@ void vHandleControl(void* pvParameters) {
         temp = 'B';
         break;
       case 'D':
-        bluetoothOn = false;
+        if (bluetoothOn) {
+          bluetoothOn = false;
+        } else {
+          wifiOn = false;
+          Wire.end();
+        }
+        isHandle = false;
+        xQueueReset(queueCommand);
         vTaskSuspend(NULL);
         break;
       case 'F':
@@ -413,19 +448,12 @@ void receiveEvent(int howMany) {
   }
   if (!isHandle) {
     isHandle = true;
-    vTaskResume(xTaskHandleControl);
+    vTaskResume(xTaskHandleData);
   }
   while (0 < Wire.available()) {
     command = Wire.read();
     Serial.println(command);
     xQueueSendToBackFromISR(queueCommand, &command, &xHigherPriorityTaskWoken);
-  }
-
-  if (command == 'D') {
-    wifiOn = false;
-    Wire.end();
-    command = 'S';
-    bluetoothOn = true;
   }
 
   if (xHigherPriorityTaskWoken) {
@@ -436,15 +464,15 @@ void receiveEvent(int howMany) {
 void requestEvent() {
   String json;
   BaseType_t xTaskWokenByReceive = pdFALSE;
-  if (xQueueReceiveFromISR(queueJson, &json, &xTaskWokenByReceive)) {
-    if (json.length() < 32) {
-      for (int i = json.length() + 1; i <= 32; i++) {
-        json += " ";
-      }
-    }
-    Wire.write(json.c_str());
-  }
-  if (xTaskWokenByReceive != pdFALSE) {
-    taskYIELD();
-  }
+  // if (xQueueReceiveFromISR(queueJson, &json, &xTaskWokenByReceive)) {
+  //   if (json.length() < 32) {
+  //     for (int i = json.length() + 1; i <= 32; i++) {
+  //       json += " ";
+  //     }
+  //   }
+  //   Wire.write(json.c_str());
+  // }
+  // if (xTaskWokenByReceive != pdFALSE) {
+  //   taskYIELD();
+  // }
 }
