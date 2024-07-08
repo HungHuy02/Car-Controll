@@ -5,6 +5,7 @@
 #include <Wire.h>
 #include <task.h>
 #include <queue.h>
+#include <stdio.h>
 
 #define IN1 3
 #define IN2 5
@@ -60,7 +61,7 @@ void setup() {
   Wire.onRequest(requestEvent);
 
   queueCommand = xQueueCreate(3, sizeof(char));
-  queueJson = xQueueCreate(3, sizeof(String));
+  queueJson = xQueueCreate(2, sizeof(char) * 28);
 
   xTaskCreate(vConnectTask, "Task1", 64, NULL, configMAX_PRIORITIES - 1, &xTaskHandleConnect);
   xTaskCreate(vHandleData, "Task2", 64, NULL, configMAX_PRIORITIES - 1, &xTaskHandleData);
@@ -261,7 +262,8 @@ void vAutoLine(void* pvParameters) {
       }
       right(AUTO_SPEED);
       if (wifiOn) {
-        String json = "{\"Dl\":" + String(Dleft_sensor) + ",\"Dr\":" + String(Dright_sensor) + "}";
+        char json[17];
+        snprintf(json, sizeof(json), "{\"Dl\":%d,\"Dr\":%d}", Dleft_sensor, Dright_sensor);
         xQueueSendToBack(queueJson, &json, portMAX_DELAY);
       }
       vTaskDelay(200 / portTICK_PERIOD_MS);
@@ -274,7 +276,8 @@ void vAutoLine(void* pvParameters) {
       }
       left(AUTO_SPEED);
       if (wifiOn) {
-        String json = "{\"Dl\":" + String(Dleft_sensor) + ",\"Dr\":" + String(Dright_sensor) + "}";
+        char json[17];
+        snprintf(json, sizeof(json), "{\"Dl\":%d,\"Dr\":%d}", Dleft_sensor, Dright_sensor);
         xQueueSendToBack(queueJson, &json, portMAX_DELAY);
       }
       vTaskDelay(200 / portTICK_PERIOD_MS);
@@ -305,7 +308,8 @@ void vAutoObstacle() {
       vTaskDelay(200 / portTICK_PERIOD_MS);
       distanceL = lookL();
       if (wifiOn) {
-        String json = "{\"d\":" + String(distance) + ",\"dR\":" + String(distanceR) + ",\"dL\":" + String(distanceL) + "}";
+        char json[28];
+        snprintf(json, sizeof(json), "{\"d\":%d,\"dR\":%d,\"dL\":%d}", distance, distanceR, distanceL);
         xQueueSendToBack(queueJson, &json, portMAX_DELAY);
       }
       vTaskDelay(200 / portTICK_PERIOD_MS);
@@ -341,7 +345,8 @@ void vAutoFollow() {
           vTaskDelay(100 / portTICK_PERIOD_MS);
         }
         if (wifiOn) {
-          String json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
+          char json[24];
+          snprintf(json, sizeof(json), "{\"d\":%d,\"Ur\":%d,\"Ul\":%d}", distance, Uright_sensor, Uleft_sensor);
           xQueueSendToBack(queueJson, &json, portMAX_DELAY);
         }
         back(AUTO_SPEED);
@@ -351,7 +356,8 @@ void vAutoFollow() {
           vTaskDelay(100 / portTICK_PERIOD_MS);
         }
         if (wifiOn) {
-          String json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
+          char json[24];
+          snprintf(json, sizeof(json), "{\"d\":%d,\"Ur\":%d,\"Ul\":%d}", distance, Uright_sensor, Uleft_sensor);
           xQueueSendToBack(queueJson, &json, portMAX_DELAY);
         }
         forward(AUTO_SPEED);
@@ -364,7 +370,8 @@ void vAutoFollow() {
         vTaskDelay(100 / portTICK_PERIOD_MS);
       }
       if (wifiOn) {
-        String json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
+        char json[24];
+        snprintf(json, sizeof(json), "{\"d\":%d,\"Ur\":%d,\"Ul\":%d}", distance, Uright_sensor, Uleft_sensor);
         xQueueSendToBack(queueJson, &json, portMAX_DELAY);
       }
       right(AUTO_SPEED);
@@ -374,7 +381,8 @@ void vAutoFollow() {
         vTaskDelay(100 / portTICK_PERIOD_MS);
       }
       if (wifiOn) {
-        String json = "{\"d\":" + String(distance) + ",\"Ur\":" + String(Uright_sensor) + ",\"Ul\":" + String(Uleft_sensor) + "}";
+        char json[24];
+        snprintf(json, sizeof(json), "{\"d\":%d,\"Ur\":%d,\"Ul\":%d}", distance, Uright_sensor, Uleft_sensor);
         xQueueSendToBack(queueJson, &json, portMAX_DELAY);
       }
       left(AUTO_SPEED);
@@ -462,17 +470,23 @@ void receiveEvent(int howMany) {
 }
 
 void requestEvent() {
-  String json;
+  char json[28];
   BaseType_t xTaskWokenByReceive = pdFALSE;
-  // if (xQueueReceiveFromISR(queueJson, &json, &xTaskWokenByReceive)) {
-  //   if (json.length() < 32) {
-  //     for (int i = json.length() + 1; i <= 32; i++) {
-  //       json += " ";
-  //     }
-  //   }
-  //   Wire.write(json.c_str());
-  // }
-  // if (xTaskWokenByReceive != pdFALSE) {
-  //   taskYIELD();
-  // }
+  if (xQueueReceiveFromISR(queueJson, &json, &xTaskWokenByReceive)) {
+    char data[33];
+    size_t jsonLength = strlen(json);
+    for (size_t i = 0; i < 32; i++) {
+        if (i < jsonLength) {
+            data[i] = json[i];
+        } else {
+            data[i] = ' ';
+        }
+    }
+
+    data[32] = '\0';
+    Wire.write(data);
+  }
+  if (xTaskWokenByReceive != pdFALSE) {
+    taskYIELD();
+  }
 }
