@@ -41,8 +41,10 @@ byte run = 0;
 
 bool wifiOn = true;
 bool bluetoothOn = true;
+bool isConnect = true;
 bool isHandle = false;
 bool isAuto = false;
+
 
 void setup() {
   Serial.begin(9600);
@@ -61,7 +63,7 @@ void setup() {
   Wire.onRequest(requestEvent);
 
   queueCommand = xQueueCreate(3, sizeof(char));
-  queueJson = xQueueCreate(2, sizeof(char) * 28);
+  queueJson = xQueueCreate(2, sizeof(char) * 12);
 
   xTaskCreate(vConnectTask, "Task1", 64, NULL, configMAX_PRIORITIES - 1, &xTaskHandleConnect);
   xTaskCreate(vHandleData, "Task2", 64, NULL, configMAX_PRIORITIES - 1, &xTaskHandleData);
@@ -127,7 +129,8 @@ void vHandleData(void* pvParameters) {
       }
     }
 
-    if (wifiOn) {
+    if (wifiOn && isConnect) {
+      isConnect = false;
       vTaskDelete(xTaskHandleConnect);
     }
 
@@ -137,10 +140,11 @@ void vHandleData(void* pvParameters) {
           bluetoothOn = false;
         } else {
           wifiOn = false;
+          isConnect = true;
           Wire.end();
+          xQueueReset(queueJson);
         }
         isHandle = false;
-        xQueueReset(queueCommand);
         xQueueReset(queueCommand);
         vTaskSuspend(NULL);
         break;
@@ -150,7 +154,7 @@ void vHandleData(void* pvParameters) {
         if (!isAuto) {
           isAuto = true;
           if (wifiOn) {
-            xTaskCreate(vAutoFollow, "Task6", 256, NULL, configMAX_PRIORITIES - 1, &xTaskAutoFollow);
+            xTaskCreate(vAutoFollow, "Task6", 272, NULL, configMAX_PRIORITIES - 1, &xTaskAutoFollow);
           } else {
             xTaskCreate(vAutoFollow, "Task6", 198, NULL, configMAX_PRIORITIES - 1, &xTaskAutoFollow);
           }
@@ -164,9 +168,7 @@ void vHandleData(void* pvParameters) {
         if (!isAuto) {
           isAuto = true;
           if (wifiOn) {
-            Serial.println("1");
-            xTaskCreate(vAutoLine, "Task4", 256, NULL, configMAX_PRIORITIES - 1, &xTaskAutoLine);
-            Serial.println("2");
+            xTaskCreate(vAutoLine, "Task4", 272, NULL, configMAX_PRIORITIES - 1, &xTaskAutoLine);
           } else {
             xTaskCreate(vAutoLine, "Task4", 198, NULL, configMAX_PRIORITIES - 1, &xTaskAutoLine);
           }
@@ -178,7 +180,7 @@ void vHandleData(void* pvParameters) {
         if (!isAuto) {
           isAuto = true;
           if (wifiOn) {
-            xTaskCreate(vAutoObstacle, "Task5", 256, NULL, configMAX_PRIORITIES - 1, &xTaskAutoObstacle);
+            xTaskCreate(vAutoObstacle, "Task5", 272, NULL, configMAX_PRIORITIES - 1, &xTaskAutoObstacle);
           } else {
             xTaskCreate(vAutoObstacle, "Task5", 198, NULL, configMAX_PRIORITIES - 1, &xTaskAutoObstacle);
           }
@@ -190,7 +192,7 @@ void vHandleData(void* pvParameters) {
         temp = 'F';
         myServo.detach();
         xQueueSendToFront(queueCommand, &command, portMAX_DELAY);
-        xTaskCreate(vHandleControl, "Task3", 64, NULL, configMAX_PRIORITIES - 1, &xTaskHandleControl);
+        xTaskCreate(vHandleControl, "Task3", 128, NULL, configMAX_PRIORITIES - 1, &xTaskHandleControl);
         vTaskSuspend(NULL);
     }
   }
@@ -199,6 +201,7 @@ void vHandleData(void* pvParameters) {
 void vHandleControl(void* pvParameters) {
   char command, temp;
   for (;;) {
+    Serial.println("1");
     if (xQueueReceive(queueCommand, &command, portMAX_DELAY) == pdPASS) {
       if (command != temp) {
         Stop();
@@ -215,7 +218,9 @@ void vHandleControl(void* pvParameters) {
           bluetoothOn = false;
         } else {
           wifiOn = false;
+          isConnect = true;
           Wire.end();
+          xQueueReset(queueJson);
         }
         isHandle = false;
         xQueueReset(queueCommand);
@@ -262,9 +267,10 @@ void vAutoLine(void* pvParameters) {
       }
       right(AUTO_SPEED);
       if (wifiOn) {
-        char json[17];
-        snprintf(json, sizeof(json), "{\"Dl\":%d,\"Dr\":%d}", Dleft_sensor, Dright_sensor);
-        xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+        char json[5];
+        snprintf(json, sizeof(json), "%d %d", Dleft_sensor, Dright_sensor);
+        Serial.println(json);
+        // xQueueSendToBack(queueJson, &json, portMAX_DELAY);
       }
       vTaskDelay(200 / portTICK_PERIOD_MS);
     } else if (Dleft_sensor == 1 && Dright_sensor == 0) {
@@ -276,9 +282,10 @@ void vAutoLine(void* pvParameters) {
       }
       left(AUTO_SPEED);
       if (wifiOn) {
-        char json[17];
-        snprintf(json, sizeof(json), "{\"Dl\":%d,\"Dr\":%d}", Dleft_sensor, Dright_sensor);
-        xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+        char json[5];
+        snprintf(json, sizeof(json), "%d %d", Dleft_sensor, Dright_sensor);
+        Serial.println(json);
+        // xQueueSendToBack(queueJson, &json, portMAX_DELAY);
       }
       vTaskDelay(200 / portTICK_PERIOD_MS);
     } else {
@@ -308,9 +315,10 @@ void vAutoObstacle() {
       vTaskDelay(200 / portTICK_PERIOD_MS);
       distanceL = lookL();
       if (wifiOn) {
-        char json[28];
-        snprintf(json, sizeof(json), "{\"d\":%d,\"dR\":%d,\"dL\":%d}", distance, distanceR, distanceL);
-        xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+        char json[12];
+        snprintf(json, sizeof(json), "%d %d %d", distance, distanceR, distanceL);
+        Serial.println(json);
+        // xQueueSendToBack(queueJson, &json, portMAX_DELAY);
       }
       vTaskDelay(200 / portTICK_PERIOD_MS);
       if (distanceR >= distanceL) {
@@ -345,9 +353,10 @@ void vAutoFollow() {
           vTaskDelay(100 / portTICK_PERIOD_MS);
         }
         if (wifiOn) {
-          char json[24];
-          snprintf(json, sizeof(json), "{\"d\":%d,\"Ur\":%d,\"Ul\":%d}", distance, Uright_sensor, Uleft_sensor);
-          xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+          char json[8];
+          snprintf(json, sizeof(json), "%d %d %d", distance, Uright_sensor, Uleft_sensor);
+          Serial.println(json);
+          // xQueueSendToBack(queueJson, &json, portMAX_DELAY);
         }
         back(AUTO_SPEED);
       } else if (distance <= 25 && distance > 12) {
@@ -356,9 +365,10 @@ void vAutoFollow() {
           vTaskDelay(100 / portTICK_PERIOD_MS);
         }
         if (wifiOn) {
-          char json[24];
-          snprintf(json, sizeof(json), "{\"d\":%d,\"Ur\":%d,\"Ul\":%d}", distance, Uright_sensor, Uleft_sensor);
-          xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+          char json[8];
+          snprintf(json, sizeof(json), "%d %d %d", distance, Uright_sensor, Uleft_sensor);
+          Serial.println(json);
+          // xQueueSendToBack(queueJson, &json, portMAX_DELAY);
         }
         forward(AUTO_SPEED);
       } else {
@@ -370,9 +380,10 @@ void vAutoFollow() {
         vTaskDelay(100 / portTICK_PERIOD_MS);
       }
       if (wifiOn) {
-        char json[24];
-        snprintf(json, sizeof(json), "{\"d\":%d,\"Ur\":%d,\"Ul\":%d}", distance, Uright_sensor, Uleft_sensor);
-        xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+        char json[8];
+        snprintf(json, sizeof(json), "%d %d %d", distance, Uright_sensor, Uleft_sensor);
+        Serial.println(json);
+        // xQueueSendToBack(queueJson, &json, portMAX_DELAY);
       }
       right(AUTO_SPEED);
     } else if (Uleft_sensor != 0 && Uright_sensor == 0) {
@@ -381,9 +392,10 @@ void vAutoFollow() {
         vTaskDelay(100 / portTICK_PERIOD_MS);
       }
       if (wifiOn) {
-        char json[24];
-        snprintf(json, sizeof(json), "{\"d\":%d,\"Ur\":%d,\"Ul\":%d}", distance, Uright_sensor, Uleft_sensor);
-        xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+        char json[8];
+        snprintf(json, sizeof(json), "%d %d %d", distance, Uright_sensor, Uleft_sensor);
+        Serial.println(json);
+        // xQueueSendToBack(queueJson, &json, portMAX_DELAY);
       }
       left(AUTO_SPEED);
     } else if (Uleft_sensor == 0 && Uright_sensor == 0) {
@@ -470,23 +482,23 @@ void receiveEvent(int howMany) {
 }
 
 void requestEvent() {
-  char json[28];
-  BaseType_t xTaskWokenByReceive = pdFALSE;
-  if (xQueueReceiveFromISR(queueJson, &json, &xTaskWokenByReceive)) {
-    char data[33];
-    size_t jsonLength = strlen(json);
-    for (size_t i = 0; i < 32; i++) {
-        if (i < jsonLength) {
-            data[i] = json[i];
-        } else {
-            data[i] = ' ';
-        }
-    }
+  // char json[28];
+  // BaseType_t xTaskWokenByReceive = pdFALSE;
+  // if (xQueueReceiveFromISR(queueJson, &json, &xTaskWokenByReceive)) {
+  //   char data[33];
+  //   size_t jsonLength = strlen(json);
+  //   for (size_t i = 0; i < 32; i++) {
+  //       if (i < jsonLength) {
+  //           data[i] = json[i];
+  //       } else {
+  //           data[i] = ' ';
+  //       }
+  //   }
 
-    data[32] = '\0';
-    Wire.write(data);
-  }
-  if (xTaskWokenByReceive != pdFALSE) {
-    taskYIELD();
-  }
+  //   data[32] = '\0';
+  //   Wire.write(data);
+  // }
+  // if (xTaskWokenByReceive != pdFALSE) {
+  //   taskYIELD();
+  // }
 }
