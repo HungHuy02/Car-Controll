@@ -2,7 +2,7 @@
 #include <SocketIOclient.h>
 #include <ESP8266WiFi.h>
 #include <Wire.h>
-#include <ArduinoJson.h>
+#include <ctype.h>
 
 const char *ssid = "student";
 const char *password = ""; 
@@ -72,14 +72,42 @@ void loop() {
 
 void getAndPutData() {
   char c;
+  String data = "";
   String json = "";
-  Wire.requestFrom(100, 32);
-  delay(100);
+  Wire.requestFrom(100, 11);
   while(Wire.available() > 0){
     c = Wire.read();
-    json += c;
+    data += c;
   }
-  if(json[0] != ' ' && json[1] != ' ') {
+  Serial.println(data);
+  if(isDigit(data[0])) {
+    Serial.println("1");
+    size_t index;
+    for(index = data.length() - 1; index >= 0; index--) {
+      if(isDigit(data[index])) {
+        break;
+      }
+    }
+    data = data.substring(0, index + 1);
+    index = data.indexOf(' ');
+    if(temp == 'Y') {
+      String Dleft_sensor = data.substring(0, index);
+      String Dright_sensor = data.substring(index + 1);
+      json = "{\"Dl\":" + Dleft_sensor + ",\"Dr\":" + Dright_sensor + "}";
+    }else if(temp == 'Z') {
+      String distance = data.substring(0, index);
+      size_t lastIndex = data.lastIndexOf(' ');
+      String distanceR = data.substring(index + 1, lastIndex);
+      String distanceL = data.substring(lastIndex + 1);
+      json = "{\"d\":" + distance + ",\"dR\":" + distanceR + ",\"dL\":" + distanceL + "}";
+    }else {
+      String distance = data.substring(0, index);
+      size_t lastIndex = data.lastIndexOf(' ');
+      String Uright_sensor = data.substring(index + 1, lastIndex);
+      String Uleft_sensor = data.substring(lastIndex + 1);
+      json = "{\"d\":" + distance + ",\"Ur\":" + Uright_sensor + ",\"Ul\":" + Uleft_sensor + "}";
+    }
+
     String payload = "/car-active,[\"update-parameters\"," + json + "]";
     Serial.println(payload);
     socketIO.sendEVENT(payload);
