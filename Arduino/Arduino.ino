@@ -6,6 +6,7 @@
 #include <task.h>
 #include <queue.h>
 #include <stdio.h>
+#include <ctype.h>
 
 #define IN1 3
 #define IN2 5
@@ -201,7 +202,6 @@ void vHandleData(void* pvParameters) {
 void vHandleControl(void* pvParameters) {
   char command, temp;
   for (;;) {
-    Serial.println("1");
     if (xQueueReceive(queueCommand, &command, portMAX_DELAY) == pdPASS) {
       if (command != temp) {
         Stop();
@@ -269,8 +269,7 @@ void vAutoLine(void* pvParameters) {
       if (wifiOn) {
         char json[5];
         snprintf(json, sizeof(json), "%d %d", Dleft_sensor, Dright_sensor);
-        Serial.println(json);
-        // xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+        xQueueSendToBack(queueJson, &json, portMAX_DELAY);
       }
       vTaskDelay(200 / portTICK_PERIOD_MS);
     } else if (Dleft_sensor == 1 && Dright_sensor == 0) {
@@ -284,8 +283,7 @@ void vAutoLine(void* pvParameters) {
       if (wifiOn) {
         char json[5];
         snprintf(json, sizeof(json), "%d %d", Dleft_sensor, Dright_sensor);
-        Serial.println(json);
-        // xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+        xQueueSendToBack(queueJson, &json, portMAX_DELAY);
       }
       vTaskDelay(200 / portTICK_PERIOD_MS);
     } else {
@@ -317,8 +315,7 @@ void vAutoObstacle() {
       if (wifiOn) {
         char json[12];
         snprintf(json, sizeof(json), "%d %d %d", distance, distanceR, distanceL);
-        Serial.println(json);
-        // xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+        xQueueSendToBack(queueJson, &json, portMAX_DELAY);
       }
       vTaskDelay(200 / portTICK_PERIOD_MS);
       if (distanceR >= distanceL) {
@@ -355,8 +352,7 @@ void vAutoFollow() {
         if (wifiOn) {
           char json[8];
           snprintf(json, sizeof(json), "%d %d %d", distance, Uright_sensor, Uleft_sensor);
-          Serial.println(json);
-          // xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+          xQueueSendToBack(queueJson, &json, portMAX_DELAY);
         }
         back(AUTO_SPEED);
       } else if (distance <= 25 && distance > 12) {
@@ -367,8 +363,7 @@ void vAutoFollow() {
         if (wifiOn) {
           char json[8];
           snprintf(json, sizeof(json), "%d %d %d", distance, Uright_sensor, Uleft_sensor);
-          Serial.println(json);
-          // xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+          xQueueSendToBack(queueJson, &json, portMAX_DELAY);
         }
         forward(AUTO_SPEED);
       } else {
@@ -382,8 +377,7 @@ void vAutoFollow() {
       if (wifiOn) {
         char json[8];
         snprintf(json, sizeof(json), "%d %d %d", distance, Uright_sensor, Uleft_sensor);
-        Serial.println(json);
-        // xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+        xQueueSendToBack(queueJson, &json, portMAX_DELAY);
       }
       right(AUTO_SPEED);
     } else if (Uleft_sensor != 0 && Uright_sensor == 0) {
@@ -394,8 +388,7 @@ void vAutoFollow() {
       if (wifiOn) {
         char json[8];
         snprintf(json, sizeof(json), "%d %d %d", distance, Uright_sensor, Uleft_sensor);
-        Serial.println(json);
-        // xQueueSendToBack(queueJson, &json, portMAX_DELAY);
+        xQueueSendToBack(queueJson, &json, portMAX_DELAY);
       }
       left(AUTO_SPEED);
     } else if (Uleft_sensor == 0 && Uright_sensor == 0) {
@@ -482,23 +475,13 @@ void receiveEvent(int howMany) {
 }
 
 void requestEvent() {
-  // char json[28];
-  // BaseType_t xTaskWokenByReceive = pdFALSE;
-  // if (xQueueReceiveFromISR(queueJson, &json, &xTaskWokenByReceive)) {
-  //   char data[33];
-  //   size_t jsonLength = strlen(json);
-  //   for (size_t i = 0; i < 32; i++) {
-  //       if (i < jsonLength) {
-  //           data[i] = json[i];
-  //       } else {
-  //           data[i] = ' ';
-  //       }
-  //   }
-
-  //   data[32] = '\0';
-  //   Wire.write(data);
-  // }
-  // if (xTaskWokenByReceive != pdFALSE) {
-  //   taskYIELD();
-  // }
+  char json[12];
+  BaseType_t xTaskWokenByReceive = pdFALSE;
+  if (xQueueReceiveFromISR(queueJson, &json, &xTaskWokenByReceive)) {
+    Serial.println(json);
+    Wire.write(json);
+  } 
+  if (xTaskWokenByReceive != pdFALSE) {
+    taskYIELD();
+  }
 }
